@@ -6,7 +6,7 @@ import { CoupleForm } from './CoupleForm';
 
 @Injectable()
 export class CouplesService {
-    private serverUrl = 'http://localhost:3000/';
+    private serverUrl = 'https://kindly-serious-weeder.glitch.me/';
     private avatarModel: Avatar = { Width: 150, Height: 150 };
 
     async createCouplesFromUrl(imageUrl: string): Promise<string[]> {
