@@ -1,71 +1,35 @@
 import { Injectable } from '@nestjs/common';
 import Jimp = require('jimp');
 import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs';
-import { response } from 'express';
-import { join } from 'path';
+import { Avatar } from 'src/models/Avatar';
+import { CoupleForm } from './CoupleForm';
 
 @Injectable()
 export class CouplesService {
-    cleanupCouples(): void {
-        const testFolder = join(__dirname, '..', '..', 'public', 'couples');
-        if (!fs.existsSync(testFolder)) {
-            fs.mkdirSync(testFolder);
-        }
-        fs.readdir(testFolder, (err, files) => {
-            files.forEach(file => {
-                const fileStats = fs.statSync(`${testFolder}/${file}`);
-                const birthdate = fileStats.mtime.getTime();
-                const datenow = new Date().getTime();
-                if (birthdate + 1000 * 60 * 5 < datenow) {
-                    fs.unlinkSync(`${testFolder}/${file}`);
-                }
-                // console.log(x); // use those file and return it as a REST API
-            });
-        });
+    private serverUrl = 'http://localhost:3000/';
+    private avatarModel: Avatar = { Width: 150, Height: 150 };
+
+    async createCouplesFromUrl(imageUrl: string): Promise<string[]> {
+        const image: Jimp = await Jimp.read(imageUrl);
+        const response = this.generateCouples(image);
+        return response;
     }
 
-    constructor() {
-        console.log('Initialize Deletion');
-        setInterval(this.cleanupCouples, 1000);
-    }
-    createCouplesFromUrl(s: string): Promise<string[]> {
-        return Jimp.read(s)
-            .then(image => {
-                const response = this.generateCouples(image);
-                return response;
-            })
-            .catch(err => {
-                // Handle an exception.
-            }) as Promise<string[]>;
-    }
-    createCouplesFromFile(
-        fileContent: ArrayBuffer | string,
-    ): Promise<string[]> {
-        const fileBase64 = fileContent as string;
-        return Jimp.read(
-            Buffer.from(
-                fileBase64.replace(/^data:image\/png;base64,/, ''),
-                'base64',
-            ),
-        )
-            .then(image => {
-                const response = this.generateCouples(image);
-                return response;
-            })
-            .catch(err => {
-                // Handle an exception.
-            }) as Promise<string[]>;
+    async createCouplesFromFile(fileContent: string): Promise<string[]> {
+        let fileBase64 = fileContent;
+        fileBase64 = fileBase64.replace(/^data:image\/png;base64,/, '');
+        fileBase64 = fileBase64.replace(/^data:image\/jpg;base64,/, '');
+        fileBase64 = fileBase64.replace(/^data:image\/jpeg;base64,/, '');
+        fileBase64 = fileBase64.replace(/^data:image\/gif;base64,/, '');
+
+        const image: Jimp = await Jimp.read(Buffer.from(fileBase64, 'base64'));
+
+        return this.generateCouples(image);
     }
 
-    serverUrl = 'http://localhost:3000/';
-
-    avatarSize = {
-        Width: 150,
-        Height: 150,
-    };
-
-    finalresult: string[] = [];
+    getOffsetValue(substractionValue: number): number {
+        return (300 - substractionValue) / 2;
+    }
 
     createImage(
         originalImage: Jimp,
@@ -76,12 +40,14 @@ export class CouplesService {
         image.crop(
             cropPosX,
             cropPosY,
-            this.avatarSize.Width,
-            this.avatarSize.Height,
+            this.avatarModel.Width,
+            this.avatarModel.Height,
         );
+
         const name = uuidv4();
         const filePath = `couples/${name}.${originalImage.getExtension()}`;
         image.write(`./public/${filePath}`);
+        image.write(`./private/${filePath}`);
 
         return `${this.serverUrl}${filePath}`;
     }
@@ -114,21 +80,32 @@ export class CouplesService {
         return response;
     }
 
-    getOffsetValue(substractionValue): number {
-        return (300 - substractionValue) / 2;
-    }
-
-    generateCouples(image: Jimp): string[] {
-        // Do stuff with the image.
-        const workImage: Jimp = image.clone();
+    generateCouples(originalImage: Jimp): string[] {
+        const workImage = originalImage.clone();
         workImage.autocrop(false);
 
-        let response: string[] = [];
-        if (workImage.bitmap.width > workImage.bitmap.height) {
-            response = this.generateHorizontalCouple(workImage);
-        } else if (workImage.bitmap.height >= workImage.bitmap.width) {
-            response = this.generateVerticalCouple(workImage);
+        const workImageWidth: number = workImage.bitmap.width;
+        const workImageHeight: number = workImage.bitmap.height;
+
+        const coupleForm: CoupleForm = this.getCoupleForm(
+            workImageWidth,
+            workImageHeight,
+        );
+
+        switch (coupleForm) {
+            case CoupleForm.M1X2:
+                return this.generateHorizontalCouple(workImage);
+            case CoupleForm.M2X1:
+                return this.generateVerticalCouple(workImage);
         }
-        return response;
+    }
+
+    getCoupleForm(workImageWidth: number, workImageHeight: number): CoupleForm {
+        if (workImageWidth > workImageHeight) {
+            return CoupleForm.M1X2;
+        } else if (workImageHeight >= workImageWidth) {
+            return CoupleForm.M2X1;
+        }
+        throw new Error('Error');
     }
 }

@@ -1,20 +1,34 @@
-import { Controller, Post, Req, Get } from '@nestjs/common';
+import { Controller, Post, Req, Get, Inject, Logger } from '@nestjs/common';
 import { CouplesService } from './couples.service';
 import { Request } from 'express';
+import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
+import { CoupleInfoDecorator } from './couple-info.decorator';
+import { CoupleInfo } from 'src/models/CoupleInfo';
 
 @Controller('couples')
 export class CouplesController {
     private readonly coupleService: CouplesService;
 
-    constructor(coupleService: CouplesService) {
+    constructor(
+        coupleService: CouplesService,
+        @Inject(WINSTON_MODULE_PROVIDER) private readonly logger: Logger,
+    ) {
         this.coupleService = coupleService;
     }
 
     @Post()
-    createCouples(@Req() request: Request): Promise<string[]> {
-        const uploadedFile: any = request.body;
-        const fileContent: ArrayBuffer = uploadedFile.content;
-        return this.coupleService.createCouplesFromFile(fileContent);
+    createCouplesFromFile(
+        @CoupleInfoDecorator() coupleInfo: CoupleInfo,
+    ): Promise<string[]> {
+        if (coupleInfo.fileContent) {
+            return this.coupleService.createCouplesFromFile(
+                coupleInfo.fileContent,
+            );
+        }
+        if (coupleInfo.imageUrl) {
+            return this.coupleService.createCouplesFromUrl(coupleInfo.imageUrl);
+        }
+        return Promise.resolve([]);
     }
 
     @Get('testX')
